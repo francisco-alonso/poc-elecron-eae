@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>EAE-X Desktop - Preflight failed</title>
+    <style>
+      body { font-family: "Segoe UI", system-ui, sans-serif; margin: 40px; color: #1f2933; background: #fff; }
+      h1 { color: #b42318; font-size: 22px; }
+      dt { font-weight: 600; margin-top: 16px; }
+      dd { margin: 4px 0 0; }
+      code { background: #f2f4f7; padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <h1>EAE-X Desktop could not start</h1>
+    <dl>
+      <dt>Failed check</dt>
+      <dd><code id="check"></code></dd>
+      <dt>Detail</dt>
+      <dd id="detail"></dd>
+      <dt>Hint</dt>
+      <dd id="hint"></dd>
+    </dl>
+    <p>See the Troubleshooting section of the README. Fix the issue, then restart the app.</p>
+    <script>
+      const params = new URLSearchParams(location.search);
+      for (const id of ['check', 'detail', 'hint']) {
+        document.getElementById(id).textContent = params.get(id) ?? '';
+      }
+    </script>
+  </body>
+</html>
