@@ -4,8 +4,12 @@
 
 A small Electron app that opens the MAF portal in **hybridshell** mode, served by the local MAF Sandbox
 gateway. The portal loads the EAE-X micro-frontend in its single `portal-frame` region. The app then
-navigates it to the **logical devices** page of a desktop EAE project. Every page and API call goes
-through the gateway at `https://localhost:5800`, which is the only origin the EAE-X API accepts (CORS).
+navigates it to a start route, by default the EAE-X **projects** page. From there, clicking a project card
+opens its device list (DnD). Every page and API call goes through the gateway at `https://localhost:5800`,
+which is the only origin the EAE-X API accepts (CORS).
+
+The app knows nothing about EAE-X: it opens the portal at a route. Regions and the apps shown are the
+portal's business (hybridshell extension points), so a new front-end needs no change here.
 
 ```
 Electron (BrowserWindow)
@@ -17,15 +21,16 @@ https://localhost:5800/baseshell/          hybridshell portal (se.ia.baseshell)
 https://localhost:5800/mfe/eae-x:mfes:eae-x
    │  mounts
    ▼
-EAE-X MFE  (route /baseshell/eae-dca/path/<project>/projects/<guid>/devices)
+EAE-X MFE  (/baseshell/eae-dca/projects  →  /baseshell/eae-dca/path/<project>/projects/<id>/devices)
    │  calls
    ▼
 https://localhost:5800/eae-x-api/...       EAE-X API behind the Sandbox gateway (YARP)
 ```
 
 How it works: the app loads the portal **root**. After the page loads, it posts a hybridshell `navigate`
-message with the devices route and the payload `{"baseRoute":"/baseshell/eae-dca"}`. It resends the message
-every 500 ms until the portal has routed, for up to 30 s.
+message with the start route and its payload. By default the payload is `{"baseRoute":"/baseshell/<app>"}`,
+where `<app>` is the first segment of the route (`eae-dca`). It resends the message every 500 ms until the
+portal has routed, for up to 30 s.
 
 ## Prerequisites
 
@@ -43,6 +48,10 @@ The Sandbox needs:
 
 - The **EAE-X micro app** deployed in **Desktop** mode, with the `hybridshell-app-navigation` subscription in its `.arp`.
 - The **`se.ia.baseshell`** app, built from maf-portal with the PoC fallback described below.
+- The EAE-X API with the **projects folder** configured: set `DesktopProjects:RootPath` in the EAE-X API
+  `appsettings.Desktop.json` to the folder that contains your projects, for example
+  `%USERPROFILE%\Documents\Schneider Electric\EcoStruxureAutomationExpertProjects`. Every sub-folder with a
+  `.sol` file is listed as a project. Check it with <https://localhost:5800/eae-x-api/api/v1/projects>.
 
 ## Known PoC patch (outside this repo)
 
@@ -59,10 +68,11 @@ npm install
 npm start
 ```
 
-Use another project or project ID:
+Open another start route, or give an explicit payload:
 
 ```powershell
-npm start -- --project="C:\path\to\Project" --project-id=<guid>
+npm start -- --route=/eae-dca/projects
+npm start -- --route=/eae-dca/projects --payload="{\"baseRoute\":\"/baseshell/eae-dca\"}"
 ```
 
 Open DevTools on startup:
@@ -73,25 +83,28 @@ npm run start:debug
 
 | CLI argument | Environment variable | Default |
 |---|---|---|
-| `--project=` | `EAE_PROJECT_PATH` | `%USERPROFILE%\Documents\Schneider Electric\EcoStruxureAutomationExpertProjects\sandbox-francesco` |
-| `--project-id=` | `EAE_PROJECT_ID` | `3f2b8c1e-7a4d-4e9b-9c55-1d2a6b7e8f90` (any GUID works in Desktop mode) |
+| `--route=` | `EAE_ROUTE` | `/eae-dca/projects` (will become the home micro-frontend once it exists) |
+| `--payload=` | `EAE_PAYLOAD` | `{"baseRoute":"/baseshell/<first route segment>"}` |
 | `--gateway=` | `EAE_GATEWAY_URL` | `https://localhost:5800` |
 
-CLI arguments take precedence over environment variables. The project path must be an absolute Windows
-folder path (`C:\...\MyProject`), without a file extension.
+CLI arguments take precedence over environment variables.
 
 ```powershell
-$env:EAE_PROJECT_PATH = "C:\path\to\Project"
-$env:EAE_PROJECT_ID = "<guid>"
+$env:EAE_ROUTE = "/eae-dca/projects"
 npm start
 ```
 
-Use **Ctrl+R** (File > Reload) to reload the portal root and navigate again.
+Menu:
+
+- **File > New Window** (Ctrl+N) opens another window on the start route. A portal link opened in a new
+  window by a micro-frontend also gets its own window; other links open in the system browser.
+- **File > Reload** (Ctrl+R) reloads the portal root and navigates back to the current page.
 
 ## Expected result
 
-The window "EAE-X Desktop" shows the EAE-X devices page. For the default project it lists **`EcoRT_0`**
-(`Soft_dPAC`).
+The window "EAE-X Desktop" shows one card per project of the projects folder. Clicking a card opens its
+device list; for the `sandbox-francesco` test project it lists **`EcoRT_0`** (`Soft_dPAC`). No project path
+or ID has to be typed: both come from the projects API.
 
 ## Troubleshooting
 
@@ -99,10 +112,12 @@ The window "EAE-X Desktop" shows the EAE-X devices page. For the default project
 |---|---|
 | Preflight: gateway unreachable | Sandbox not running. |
 | Extension point empty or `eae-dca` missing | EAE-X `.arp` lacks the subscription. Redeploy EAE-X. |
+| Projects page: "The projects folder is not configured or does not exist" | Set `DesktopProjects:RootPath` in the EAE-X API `appsettings.Desktop.json` and restart the API. |
+| Projects page: no project found | No sub-folder of the projects folder contains a `.sol` file. |
 | `/baseshell/` 404 | Baseshell app not installed. |
 | 404 on `.../ExtensionManager.Service/participationModels` in the console, blank page | Portal built without the PoC fallback. |
 | Blank MFE area | `baseRoute` / URL mismatch, or the navigate message was lost. Check the `[renderer]` logs. Press Ctrl+R. |
-| 400 `INVALID_PROJECT_CONTEXT_IDENTIFIER` | Bad project path. |
+| 400 `INVALID_PROJECT_CONTEXT_IDENTIFIER` | Bad project path in the device route. Open the project from the projects page. |
 | 403/405 or CORS errors | Page not loaded from `https://localhost:5800`. |
 | `npm install` fails downloading Electron on the corporate network | Set `ELECTRON_MIRROR` or proxy (`HTTPS_PROXY`), or download it manually. |
 
@@ -114,5 +129,6 @@ Logs:
 
 ## Future option
 
-**Variant C:** a custom single-spa root-config in which Electron mounts the EAE-X MFE directly, without
-the hybridshell portal. Not implemented.
+- **Home micro-frontend:** a separate micro app in the Sandbox (`routeInitial: "home"`) that shows cards
+  registered by other apps through an extension point. Electron would then start with `--route=/home`.
+- **More regions:** extend the baseshell layout in maf-portal. Electron stays a plain container.
